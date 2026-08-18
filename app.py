@@ -9,10 +9,17 @@ SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-  st.error("请先在 Streamlit Cloud 设置 Secrets 中的 SUPABASE_URL 和 SUPABASE_KEY！")
+  st.error(
+      "请先在 Streamlit Cloud 设置 Secrets 中的 SUPABASE_URL 和 SUPABASE_KEY！"
+  )
   st.stop()
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# 创建 Supabase 客户端
+try:
+  supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+  st.error(f"连接数据库失败，请检查 Secrets 配置是否正确：{e}")
+  st.stop()
 
 
 # 2. 读取数据
@@ -23,7 +30,6 @@ def load_data():
     if data:
       return pd.DataFrame(data)
   except Exception as e:
-    # 如果表不存在，提醒提示
     pass
   return pd.DataFrame(
       columns=[
@@ -71,10 +77,15 @@ with st.sidebar:
             "读后感": review,
         }
 
-        # 写入 Supabase
-        supabase.table("books").insert(new_book).execute()
-        st.success("记录已成功同步保存至云端！")
-        st.rerun()
+        # 写入 Supabase 并捕捉异常
+        try:
+          supabase.table("books").insert(new_book).execute()
+          st.success("记录已成功同步保存至云端！")
+          st.rerun()
+        except Exception as err:
+          st.error(
+              f"保存失败！请确保 Secrets 中的 SUPABASE_KEY 是最新的 Secret Key (sb_secret_...)。错误细节: {err}"
+          )
 
 # 4. 分类与状态看板 (4栏布局)
 st.subheader("分类与状态")
@@ -121,10 +132,14 @@ if not df.empty:
     )
     filtered_df = filtered_df[mask]
 
+  # 过滤显示需要的字段
+  show_cols = [
+      c
+      for c in ["书名", "作者", "阅读状态", "个人评分", "标签", "添加时间"]
+      if c in filtered_df.columns
+  ]
   st.dataframe(
-      filtered_df[
-          ["书名", "作者", "阅读状态", "个人评分", "标签", "添加时间"]
-      ],
+      filtered_df[show_cols],
       use_container_width=True,
       hide_index=True,
   )
@@ -133,10 +148,10 @@ if not df.empty:
   for _, row in filtered_df.iterrows():
     review_text = row.get("读后感", "")
     with st.expander(
-        f"📘 《{row['书名']}》 - {row['作者']} (状态: {row['阅读状态']} | {row['个人评分']})"
+        f"📘 《{row.get('书名', '')}》 - {row.get('作者', '')} (状态: {row.get('阅读状态', '')} | {row.get('个人评分', '')})"
     ):
-      st.markdown(f"**标签**：`{row['标签']}`")
-      st.markdown(f"**添加时间**：{row['添加时间']}")
+      st.markdown(f"**标签**：`{row.get('标签', '')}`")
+      st.markdown(f"**添加时间**：{row.get('添加时间', '')}")
       st.markdown("**读后感 / 心得**：")
       if review_text and str(review_text).strip():
         st.info(review_text)
