@@ -9,16 +9,13 @@ SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-  st.error(
-      "请先在 Streamlit Cloud 设置 Secrets 中的 SUPABASE_URL 和 SUPABASE_KEY！"
-  )
+  st.error("请先在 Streamlit Cloud 设置 Secrets 中的 SUPABASE_URL 和 SUPABASE_KEY！")
   st.stop()
 
-# 创建 Supabase 客户端
 try:
   supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-  st.error(f"连接数据库失败，请检查 Secrets 配置是否正确：{e}")
+  st.error(f"连接数据库失败，请检查 Secrets 配置：{e}")
   st.stop()
 
 
@@ -29,10 +26,11 @@ def load_data():
     data = response.data
     if data:
       return pd.DataFrame(data)
-  except Exception as e:
+  except Exception:
     pass
   return pd.DataFrame(
       columns=[
+          "id",
           "书名",
           "作者",
           "阅读状态",
@@ -77,17 +75,14 @@ with st.sidebar:
             "读后感": review,
         }
 
-        # 写入 Supabase 并捕捉异常
         try:
           supabase.table("books").insert(new_book).execute()
-          st.success("记录已成功同步保存至云端！")
+          st.success("记录已成功保存！")
           st.rerun()
         except Exception as err:
-          st.error(
-              f"保存失败！请确保 Secrets 中的 SUPABASE_KEY 是最新的 Secret Key (sb_secret_...)。错误细节: {err}"
-          )
+          st.error(f"保存失败: {err}")
 
-# 4. 分类与状态看板 (4栏布局)
+# 4. 分类看板 (4栏布局)
 st.subheader("分类与状态")
 status_categories = ["已读完", "在读中", "待读", "弃坑"]
 cols = st.columns(4)
@@ -109,8 +104,8 @@ for idx, cat_name in enumerate(status_categories):
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 5. 明细表格与读后感
-st.subheader("书单明细与读后感")
+# 5. 明细列表与管理（包含删除功能）
+st.subheader("📖 书单明细与管理")
 if not df.empty:
   col_filter1, col_filter2 = st.columns([1, 2])
   with col_filter1:
@@ -132,30 +127,33 @@ if not df.empty:
     )
     filtered_df = filtered_df[mask]
 
-  # 过滤显示需要的字段
-  show_cols = [
-      c
-      for c in ["书名", "作者", "阅读状态", "个人评分", "标签", "添加时间"]
-      if c in filtered_df.columns
-  ]
-  st.dataframe(
-      filtered_df[show_cols],
-      use_container_width=True,
-      hide_index=True,
-  )
-
-  st.markdown("##### 📖 查看书籍读后感")
+  # 展开折叠显示每本书，包含删除按钮
   for _, row in filtered_df.iterrows():
+    book_id = row.get("id")
+    book_title = row.get("书名", "")
+    author_name = row.get("作者", "")
     review_text = row.get("读后感", "")
+
     with st.expander(
-        f"📘 《{row.get('书名', '')}》 - {row.get('作者', '')} (状态: {row.get('阅读状态', '')} | {row.get('个人评分', '')})"
+        f"📘 《{book_title}》 - {author_name} (状态: {row.get('阅读状态', '')} | {row.get('个人评分', '')})"
     ):
-      st.markdown(f"**标签**：`{row.get('标签', '')}`")
-      st.markdown(f"**添加时间**：{row.get('添加时间', '')}")
-      st.markdown("**读后感 / 心得**：")
-      if review_text and str(review_text).strip():
-        st.info(review_text)
-      else:
-        st.caption("暂未填写读后感。")
+      c1, c2 = st.columns([4, 1])
+      with c1:
+        st.markdown(f"**标签**：`{row.get('标签', '')}`")
+        st.markdown(f"**添加时间**：{row.get('添加时间', '')}")
+        st.markdown("**读后感 / 心得**：")
+        if review_text and str(review_text).strip():
+          st.info(review_text)
+        else:
+          st.caption("暂未填写读后感。")
+      with c2:
+        # 删除按钮
+        if st.button("🗑️ 删除本项", key=f"del_{book_id}"):
+          try:
+            supabase.table("books").delete().eq("id", book_id).execute()
+            st.success(f"《{book_title}》已被删除！")
+            st.rerun()
+          except Exception as e:
+            st.error(f"删除失败: {e}")
 else:
   st.info("目前还没有图书记录，请在左侧边栏添加第一本书吧！")
