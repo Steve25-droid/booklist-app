@@ -9,7 +9,9 @@ SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-  st.error("请先在 Streamlit Cloud 设置 Secrets 中的 SUPABASE_URL 和 SUPABASE_KEY！")
+  st.error(
+      "请先在 Streamlit Cloud 设置 Secrets 中的 SUPABASE_URL 和 SUPABASE_KEY！"
+  )
   st.stop()
 
 try:
@@ -104,7 +106,7 @@ for idx, cat_name in enumerate(status_categories):
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 5. 明细列表与管理（包含删除功能）
+# 5. 明细列表与管理（将删除按钮放在整行右侧空格里）
 st.subheader("📖 书单明细与管理")
 if not df.empty:
   col_filter1, col_filter2 = st.columns([1, 2])
@@ -127,18 +129,19 @@ if not df.empty:
     )
     filtered_df = filtered_df[mask]
 
-  # 展开折叠显示每本书，包含删除按钮
+  # 遍历每本书，整行分为两列：左边是展开栏，右边是大片空格处放置删除按钮
   for _, row in filtered_df.iterrows():
     book_id = row.get("id")
     book_title = row.get("书名", "")
     author_name = row.get("作者", "")
     review_text = row.get("读后感", "")
 
-    with st.expander(
-        f"📘 《{book_title}》 - {author_name} (状态: {row.get('阅读状态', '')} | {row.get('个人评分', '')})"
-    ):
-      c1, c2 = st.columns([4, 1])
-      with c1:
+    col_exp, col_del = st.columns([8, 1.5])
+
+    with col_exp:
+      with st.expander(
+          f"📘 《{book_title}》 - {author_name} (状态: {row.get('阅读状态', '')} | {row.get('个人评分', '')})"
+      ):
         st.markdown(f"**标签**：`{row.get('标签', '')}`")
         st.markdown(f"**添加时间**：{row.get('添加时间', '')}")
         st.markdown("**读后感 / 心得**：")
@@ -146,14 +149,14 @@ if not df.empty:
           st.info(review_text)
         else:
           st.caption("暂未填写读后感。")
-      with c2:
-        # 删除按钮
-        if st.button("🗑️ 删除本项", key=f"del_{book_id}"):
-          try:
-            supabase.table("books").delete().eq("id", book_id).execute()
-            st.success(f"《{book_title}》已被删除！")
-            st.rerun()
-          except Exception as e:
-            st.error(f"删除失败: {e}")
+
+    with col_del:
+      if st.button("🗑️ 删除", key=f"del_{book_id}", use_container_width=True):
+        try:
+          supabase.table("books").delete().eq("id", book_id).execute()
+          st.success(f"《{book_title}》已被删除！")
+          st.rerun()
+        except Exception as e:
+          st.error(f"删除失败: {e}")
 else:
   st.info("目前还没有图书记录，请在左侧边栏添加第一本书吧！")
